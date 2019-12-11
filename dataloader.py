@@ -11,6 +11,8 @@ def get_data(
     labels=['zenith', 'azimuth'],
     N_events=None, 
     dtype=np.float32,
+    #ragged_left=True,
+    sparse=True,
     ):
     '''Load in icetray hdf file for machine learning
     
@@ -30,6 +32,10 @@ def get_data(
         number of events to read
     dtype : dtype
         dtype of output arrays
+    ragged_left : bool
+        align hits to the right end of tensor
+    sparse : bool
+        if true, retrun feature vector as tf.sparse.SparseTensor
         
     Returns:
     --------
@@ -59,7 +65,14 @@ def get_data(
     N_pulses = max_pulses
     N_features = len(features)
     
-    X = np.zeros((N_events, N_channels, N_pulses, N_features), dtype=dtype)
+    if sparse:
+        import tensorflow as tf
+        indices = []
+        values = []
+        dense_shape = [N_events, N_channels, N_pulses, N_features]
+    
+    else:
+        X = np.zeros((N_events, N_channels, N_pulses, N_features), dtype=dtype)
     
     data_idx = 0
     bincount = np.bincount(pulses['Event'])
@@ -78,12 +91,33 @@ def get_data(
             dom_idx = hit['om'] - 1
             channel_idx = 60 * string_idx + dom_idx
             for i, feature in enumerate(features):
-                X[data_idx, channel_idx, hit_idx, i] = hit[feature]
+                
+                if sparse:
+                    indices.append([data_idx, channel_idx, hit_idx, i])
+                    values.append(dtype(hit[feature]))
+                else:
+                    X[data_idx, channel_idx, hit_idx, i] = hit[feature]
 
         data_idx += 1       
     
-    y = np.empty((N_events, len(labels)), dtype=dtype)
-    for i, label in enumerate(labels):
-        y[:, i] = truth[:N_events][label]
+    if sparse:
+        X = tf.sparse.SparseTensor(indices, values, dense_shape)
+    
+        indices_y = []
+        values_y = []
+        dense_shape_y = [N_events, len(labels)]
+    
+        for data_idx in range(N_events):
+            for i, label in enumerate(labels):
+                indices_y.append([data_idx, i])
+                values_y.append(dtype(truth[data_idx][label]))
+        
+        y = tf.sparse.SparseTensor(indices_y, values_y, dense_shape_y)
+    
+    else:
+        y = np.empty((N_events, len(labels)), dtype=dtype)
+        
+        for i, label in enumerate(labels):
+            y[:, i] = truth[:N_events][label]
     
     return X, y
