@@ -140,15 +140,16 @@ def get_data(
     return X, y
 
 
-#@jit
 def get_data_3d(
     fname,
     truth_i3key='MCInIcePrimary',
     pulses_i3key='SRTTWOfflinePulsesDC',
-    features=["np.sum(p['charge'])"],
+    reco_i3key='SPEFit2_DC',
     labels=['z'],
+    reco_labels=['z'],
     N_events=None, 
     dtype=np.float32,
+    min_pulses=8,
     ):
     '''Load in icetray hdf file for machine learning
     This is in 3d format = summary of pulses per DOM instead of pulses
@@ -161,20 +162,16 @@ def get_data_3d(
         key of truth information
     pulses_i3key : str
         pulse series
-    features : list
-        features for training vector
-    labels : list
-        labels for training vector
+    #features : list
+    #    features for training vector
+    #labels : list
+    #    labels for training vector
     N_events : int (optional)
         number of events to read
     dtype : dtype
         dtype of output arrays
-    ragged_left : bool
-        align hits to the right end of tensor
-    sparse : bool
-        if true, retrun feature vector as tf.sparse.SparseTensor
-    ragged : bool
-        if true, return feature vector as tf.RaggedTensor
+    min_pulses : int
+        minimum number of pulses per event
         
     Returns:
     --------
@@ -187,64 +184,99 @@ def get_data_3d(
     '''
     
     h = h5py.File(fname, 'r')
+    
+    truth_event_idx = np.array(h[truth_i3key]['Event'])
+    pulses_event_idx = np.array(h[pulses_i3key]['Event'])
+    reco_event_idx = np.array(h[reco_i3key]['Event'])
+    
+    truth = np.asarray(h[truth_i3key])[labels]
+    pulses = np.asarray(h[pulses_i3key])[['string', 'om', 'charge', 'time']]
+    reco = np.asarray(h[reco_i3key])[reco_labels]
 
-    truth = np.array(h[truth_i3key])
-    pulses = np.array(h[pulses_i3key])
+    pulses['string'] -= 1
+    pulses['om'] -= 1
+
+    N_channels = 5160
+    N_features = 7 #len(features)
+
+    # ToDo
+    
+    bincount = np.bincount(pulses_event_idx)
+
+    N_events_total = np.sum(bincount >= min_pulses)
 
     if N_events is None:
-        N_events = truth.shape[0]
-    
-    N_channels = 5160
-    N_features = len(features)
+        N_events = N_events_total
+    else:
+        assert N_events <= N_events_total
 
+           
     X = np.zeros((N_events, N_channels, N_features), dtype=dtype)
-    
+    y = np.zeros((N_events, len(labels)), dtype=dtype)
+    r = np.zeros((N_events, len(labels)), dtype=dtype)
+
+  
+
     data_idx = 0
-    bincount = np.bincount(pulses['Event'])
     
-    # fill array
     with tqdm(total=N_events) as pbar:
-        for event_idx, num_pulses in enumerate(bincount):
-            if num_pulses == 0:
-                continue
 
-            event_p = pulses[pulses['Event'] == event_idx]            
+    
+        for event_idx in np.where(bincount >= min_pulses)[0]:
+
+            # fill truth info
+            this_truth = truth[truth_event_idx == event_idx]
+            this_reco = reco[reco_event_idx == event_idx]
+            event_p = pulses[pulses_event_idx == event_idx]            
+
             # time conversion
+            # shift by median and divide by 1000
+            shift = np.median(event_p['time'])
+            if 'time' in labels:
+                this_truth['time'] -= shift
+                this_truth['time'] /= 1e3
+            if 'time' in reco_labels:
+                this_reco['time'] -= shift
+                this_reco['time'] /= 1e3 
+            event_p['time'] -= shift
+            event_p['time'] /= 1e3
 
-            min_time = np.min(event_p['time'])
-            max_time = np.max(event_p['time'])
-            ave_time = np.mean(event_p['time'])
+            for i, label in enumerate(labels):
+                y[data_idx, i] = this_truth[label]
+            if len(this_reco) > 0:
+                for i, label in enumerate(reco_labels):
+                    r[data_idx, i] = this_reco[label]
 
-            event_p['time'] -= ave_time
-            if max_time > min_time:
-                event_p['time'] /= (max_time - min_time)
 
-            for string_idx in range(86):
-                string_p = event_p[event_p['string'] == string_idx + 1]\
 
-                if len(string_p) == 0:
-                    continue
+            stringcount = np.bincount(event_p['string'])
 
-                for dom_idx in range(60):
-                    p = string_p[string_p['om'] == dom_idx + 1]
+            for string_idx in np.where(stringcount > 0)[0]:
 
-                    if len(p) == 0:
+                string_p = event_p[event_p['string'] == string_idx]
+                omcount = np.bincount(string_p['om'])
+
+                for dom_idx in np.where(omcount > 0)[0]:
+
+                    if omcount[dom_idx] == 0:
                         continue
+
+                    p = string_p[string_p['om'] == dom_idx]
 
                     channel_idx = 60 * string_idx + dom_idx
 
-                    for i, feature in enumerate(features):
-                        exec("X[data_idx, channel_idx, i] = %s"%feature)
+                    #X[data_idx, channel_idx, 0] = 1
+                    X[data_idx, channel_idx, 0] = len(p)
+                    X[data_idx, channel_idx, 1] = np.sum(p['charge'])
+                    X[data_idx, channel_idx, 2:] = np.percentile(p['time'], [0, 30, 50, 70, 100])
 
             data_idx += 1
             pbar.update(1)
 
             if data_idx == N_events:
-                break
+                break  
     
-    y = np.empty((N_events, len(labels)), dtype=dtype)
+    return X, y, r
 
-    for i, label in enumerate(labels):
-        y[:, i] = truth[:N_events][label]
 
-    return X, y
+
