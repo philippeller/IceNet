@@ -172,7 +172,6 @@ def get_data_3d(
         dtype of output arrays
     min_pulses : int
         minimum number of pulses per event
-        
     Returns:
     --------
     
@@ -189,9 +188,33 @@ def get_data_3d(
     pulses_event_idx = np.array(h[pulses_i3key]['Event'])
     reco_event_idx = np.array(h[reco_i3key]['Event'])
     
-    truth = np.asarray(h[truth_i3key])[labels]
+    
+    load_labels = list(set(labels).difference(set(['dir_x', 'dir_y', 'dir_z'])))
+    reco_load_labels = list(set(reco_labels).difference(set(['dir_x', 'dir_y', 'dir_z'])))
+    
+    truth = np.asarray(h[truth_i3key])[load_labels]
     pulses = np.asarray(h[pulses_i3key])[['string', 'om', 'charge', 'time']]
-    reco = np.asarray(h[reco_i3key])[reco_labels]
+    reco = np.asarray(h[reco_i3key])[reco_load_labels]
+
+    
+    if 'dir_x' in labels:
+        
+        from numpy.lib import recfunctions
+        
+        dir_truth = np.zeros(truth.shape, dtype=[('dir_x', dtype), ('dir_y', dtype), ('dir_z', dtype)])
+        dir_reco = np.zeros(truth.shape, dtype=[('dir_x', dtype), ('dir_y', dtype), ('dir_z', dtype)])
+    
+        dir_truth['dir_x'] = np.sin(truth['zenith']) * np.cos(truth['azimuth'])
+        dir_truth['dir_y'] = np.sin(truth['zenith']) * np.sin(truth['azimuth'])
+        dir_truth['dir_z'] = np.cos(truth['zenith'])
+        
+        dir_reco['dir_x'] = np.sin(reco['zenith']) * np.cos(reco['azimuth'])
+        dir_reco['dir_y'] = np.sin(reco['zenith']) * np.sin(reco['azimuth'])
+        dir_reco['dir_z'] = np.cos(reco['zenith'])
+        
+        
+        truth = recfunctions.merge_arrays([truth, dir_truth], flatten=True)
+        reco = recfunctions.merge_arrays([reco, dir_reco], flatten=True)
 
     pulses['string'] -= 1
     pulses['om'] -= 1
