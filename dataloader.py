@@ -179,6 +179,8 @@ def get_data_3d(
         feature array of shape (N_events, N_channels, N_pulses, N_features)
     y : array
         label array of shape (N_events, N_labels)
+    r :  array
+        reco array of shape (N_events, N_reco_labels)
     
     '''
     
