@@ -304,4 +304,69 @@ def get_data_3d(
     return X, y, r
 
 
+def get_pulses(
+    fname,
+    truth_i3key='MCInIcePrimary',
+    pulses_i3key='SRTTWOfflinePulsesDC',
+    features=['time', 'charge'],
+    labels=['zenith', 'azimuth'],
+    N_events=None, 
+    dtype=np.float32,
+    ):
 
+
+    h = h5py.File(fname, 'r')
+
+    truth = np.array(h[truth_i3key])
+    pulses = np.array(h[pulses_i3key])
+
+    if N_events is None:
+        N_events = truth.shape[0]
+    
+    x = []
+    y = []
+    
+    data_idx = 0
+    bincount = np.bincount(pulses['Event'])
+    
+    # fill array
+    
+    for event_idx, num_pulses in tqdm(enumerate(bincount), total=len(bincount)):
+        if num_pulses == 0:
+            continue
+        
+        p = pulses[pulses['Event'] == event_idx]
+        hitlist = []
+        for hit in p:
+            
+            hit_idx = hit['vector_index']
+            string_idx = hit['string'] - 1
+            dom_idx = hit['om'] - 1
+            channel_idx = 60 * string_idx + dom_idx
+            
+            feature_vector = [channel_idx]
+            for i, feature in enumerate(features):
+                if (feature == 'time'):
+                    time_axis = i+1
+                feature_vector.append(hit[feature])
+            
+            hitlist.append(feature_vector)
+            
+        # Sort pulses by time for each event
+        if ('time' in features):
+            hitlist = np.asarray(hitlist)
+            time_idx = np.argsort(hitlist[:, time_axis])
+            hitlist = hitlist[time_idx]
+        
+        x.append(hitlist)
+        
+        feature = np.empty(len(labels), dtype=dtype)
+
+
+        for i, label in enumerate(labels):
+            feature[i] = truth[data_idx][label]
+        y.append(feature)
+        
+        data_idx += 1       
+    
+    return x, y
