@@ -89,7 +89,7 @@ class EventSlicer:
         for pulse, slices in zip(event, hit_slices):
             idom = int(pulse[0])
             features = pulse[1:]
-            feat_repeat = np.repeat(features, n_slices).reshape(n_slices,-1)
+            feat_repeat = np.asarray([features] * nslices)
             event_sliced[slices, idom] = feat_repeat
         
         return event_sliced
