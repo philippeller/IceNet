@@ -53,4 +53,11 @@ def get_n_closest_doms(dom, n, dist_matrix):
     return doms
 
 
+def get_normlized_dom_positions(pmin=-1, pmax=1):
+    dom_pos_flat = get_dom_positions()
+    min_pos = np.min(dom_pos_flat)
+    max_pos = np.max(dom_pos_flat)
+    m = (max_pos - min_pos) / (pmax - pmin)
+    t = max_pos - (m*pmax)
+    return (dom_pos_flat-t) / m
 
