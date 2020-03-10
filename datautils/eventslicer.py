@@ -84,17 +84,30 @@ class EventSlicer:
         n_slices = 2 * nspread + 1
         n_pulses, n_features = event.shape
         hit_slices = self._get_hit_slices(event, ntokens, nspread)
-        
-        event_sliced = self.pads * np.ones((ntokens, self.ndoms, n_features-1))
-        for pulse, slices in zip(event, hit_slices):
-            idom = int(pulse[0])
-            features = pulse[1:]
-            feat_repeat = np.asarray([features] * nslices)
-            event_sliced[slices, idom] = feat_repeat
-        
+
+        if non_active:
+            event_sliced = self.pads * np.ones((ntokens, self.ndoms, n_features-1))
+        else:
+            event_sliced = self.pads * np.ones((ntokens, n_pulses, n_features))
+
+        for i, (pulse, slices) in enumerate(zip(event, hit_slices)):
+            if non_active:
+                idom = int(pulse[0])
+                features = pulse[1:]
+            else:
+                features = pulse
+
+            feat_repeat = np.asarray([features]*n_slices)
+
+            if non_active:
+                idx = idom
+            else:
+                idx = i
+            event_sliced[slices, idx] = feat_repeat
+
         return event_sliced
-    
-    
+
+
     def slicify_events(self, ntokens, nspread, padded=False):
         events = self.x
         return [self._slicify_event(event, ntokens, nspread, padded) for event in tqdm(events)]
