@@ -1,3 +1,6 @@
+import numpy as np
+from tqdm.notebook import tqdm
+
 class EventSlicer:
     '''
     Takes events from dataloader.get_pulses and puts them in temporal slices
