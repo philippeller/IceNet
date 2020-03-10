@@ -109,5 +109,19 @@ class EventSlicer:
 
 
     def slicify_events(self, ntokens, nspread, padded=False):
+        '''
+        Takes pulse list and transforms into temporal slices.
+
+        Parameters:
+        ----------
+        ntokens: int
+            Number of tokens to quantify time information in
+        nspread: int
+            Number of temporal slices a pulse should occupy before and after its actaul slice
+        padded: bool
+            Reserve pads at beginning and end of hit sequence for possible hit bleeding
+        non_active: book
+            Include non-active doms (otherwise just pulses)
+        '''
         events = self.x
         return [self._slicify_event(event, ntokens, nspread, padded) for event in tqdm(events)]
