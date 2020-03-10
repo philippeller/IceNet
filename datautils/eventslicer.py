@@ -1,4 +1,4 @@
-class Tokenizer:
+class EventSlicer:
     '''
     Takes events from dataloader.get_pulses and puts them in temporal slices
     Used for RNNs
