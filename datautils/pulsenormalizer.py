@@ -1,3 +1,6 @@
+import numpy as np
+from tqdm.notebook import tqdm
+
 class PulseNormalizer:
     '''
     Takes pulses from dataloader.get_pulses and processes them for NN input
