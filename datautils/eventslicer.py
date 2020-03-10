@@ -96,5 +96,5 @@ class EventSlicer:
     
     
     def slicify_events(self, ntokens, nspread, padded=False):
-        events = x
+        events = self.x
         return [self._slicify_event(event, ntokens, nspread, padded) for event in tqdm(events)]
