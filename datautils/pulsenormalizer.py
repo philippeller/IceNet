@@ -13,9 +13,9 @@ class PulseNormalizer:
     norm_cols: list
         Indices of columns to normalize
     '''
-    def __init__(self, events, norm_cols):
+    def __init__(self, events, norm_cols=None):
         self.events = events
-        self.norm_cols = norm_cols
+        self.norm_cols = norm_cols if norm_cols else list(range(events[0].shape[1]))
         self.linear_parameters = self._get_linear_parameters()
         
     
