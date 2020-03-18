@@ -35,7 +35,6 @@ class PulseNormalizer:
     
     def _get_linear_parameters(self):
         minmaxs = self._get_min_max()
-        tminmax, qminmax = self._get_min_max()
         pars = [[mm[1]-mm[0], mm[0]] for mm in minmaxs]
         return np.asarray(pars)
     
