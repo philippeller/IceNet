@@ -80,7 +80,7 @@ class EventSlicer:
         return hit_slices
     
     
-    def _slicify_event(self, event, ntokens, nspread, padded=False):
+    def _slicify_event(self, event, ntokens, nspread, padded=False, non_active=False):
         n_slices = 2 * nspread + 1
         n_pulses, n_features = event.shape
         hit_slices = self._get_hit_slices(event, ntokens, nspread)
@@ -108,7 +108,7 @@ class EventSlicer:
         return event_sliced
 
 
-    def slicify_events(self, ntokens, nspread, padded=False):
+    def slicify_events(self, ntokens, nspread, padded=False, non_active=False):
         '''
         Takes pulse list and transforms into temporal slices.
 
@@ -120,8 +120,8 @@ class EventSlicer:
             Number of temporal slices a pulse should occupy before and after its actaul slice
         padded: bool
             Reserve pads at beginning and end of hit sequence for possible hit bleeding
-        non_active: book
+        non_active: bool
             Include non-active doms (otherwise just pulses)
         '''
         events = self.x
-        return [self._slicify_event(event, ntokens, nspread, padded) for event in tqdm(events)]
+        return [self._slicify_event(event, ntokens, nspread, padded, non_active) for event in tqdm(events)]
