@@ -49,7 +49,8 @@ def get_data(
     pulses = np.array(h[pulses_i3key])
 
     if N_events is None:
-        N_events = truth.shape[0]
+        nevents = lambda x: len(np.unique(x['Event'])) # Get number of unique events in container
+        N_events = min(nevents(pulses), nevents(truth))
     
          
     # need to figure out max number of pulses in any event / string / dom first to allocate array
@@ -62,6 +63,7 @@ def get_data(
     N_features = len(features)
     
     X = np.zeros((N_events, N_channels, N_pulses, N_features), dtype=dtype)
+    y = np.zeros((N_events, len(labels)))
     
     data_idx = 0
     bincount = np.bincount(pulses['Event'])
@@ -72,7 +74,14 @@ def get_data(
             if num_pulses == 0:
                 continue
 
+            l = truth[truth['Event'] == event_idx]
+            if not l:
+                continue
+            for i, label in enumerate(labels):
+                y[data_idx, i] = l[label]
+                
             p = pulses[pulses['Event'] == event_idx]
+            
 
             for hit in p:
 
@@ -85,18 +94,13 @@ def get_data(
 
                     X[data_idx, channel_idx, hit_idx, i] = hit[feature]
 
+            
             data_idx += 1
             pbar.update(1)
             
             if data_idx == N_events:
                 break
         
-    
-    y = np.empty((N_events, len(labels)), dtype=dtype)
-
-    for i, label in enumerate(labels):
-        y[:, i] = truth[:N_events][label]
-
     return X, y
 
 
@@ -212,7 +216,7 @@ def get_data_3d(
             # fill truth info
             this_truth = truth[truth_event_idx == event_idx]
             this_reco = reco[reco_event_idx == event_idx]
-            event_p = pulses[pulses_event_idx == event_idx]            
+            event_p = pulses[pulses_event_idx == event_idx]
 
             # time conversion
             # shift by median and divide by 1000
@@ -259,7 +263,7 @@ def get_data_3d(
             pbar.update(1)
 
             if data_idx == N_events:
-                break  
+                break
     
     return X, y, r
 
@@ -270,7 +274,7 @@ def get_pulses(
     pulses_i3key='SRTTWOfflinePulsesDC',
     features=['time', 'charge'],
     labels=['zenith', 'azimuth'],
-    N_events=None, 
+    N_events=None,
     dtype=np.float32,
     ):
 
@@ -320,12 +324,10 @@ def get_pulses(
         
         x.append(hitlist)
         
-        feature = np.empty(len(labels), dtype=dtype)
-
-
-        for i, label in enumerate(labels):
-            feature[i] = truth[data_idx][label]
-        y.append(feature)
+        l = truth[truth['Event']==event_idx]
+        feature = np.asarray([l[label] for label in labels], dtype=dtype)
+        
+        y.append(feature.flatten())
         
         data_idx += 1       
     
