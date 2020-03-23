@@ -1,6 +1,7 @@
 import numpy as np
 from tqdm.notebook import tqdm
 
+
 class EventSlicer:
     '''
     Takes events from dataloader.get_pulses and puts them in temporal slices
@@ -18,10 +19,10 @@ class EventSlicer:
         self.time_windows = self._get_time_windows()
         min_times = self.time_windows[:, 0]
         max_times = self.time_windows[:, 1]
-        self.tmin = np.min(min_times[min_times!=0])
-        self.tmax = np.max(max_times[max_times!=0])
+        self.max_duration = np.max(max_times - min_times)
         self.ndoms = 5160
         self.pads = pads
+        self.padded = None
     
     
     def _get_time_windows(self):
@@ -47,29 +48,35 @@ class EventSlicer:
         time_windows = np.asarray([min_times, max_times]).T
         
         return time_windows
-        
+    
     
     def _get_linear_parameters(self, ntokens):
-        t = self.tmin
-        m = (self.tmax - self.tmin) / ntokens
-        return m, t
+        m = (self.max_duration) / (ntokens-1)
+        return m
     
     
-    def _get_hit_slices(self, event, ntokens, nspread, padded=False):
+    def _get_hit_slices(self, event, ntokens, nspread):
+        '''
+        Converts hit times into tokenized indices
+        '''
         hit_times = event[:,1]
+#         min_time = np.min(hit_times)
+#         hit_times = hit_times - min_time
+        d = self.max_duration - np.max(hit_times)
+        hit_times = hit_times + d
         # If padded, reserve spots for spread values
-        if padded:
-            m, t = self._get_linear_parameters(ntokens-2*nspread-1)
+        if self.padded and nspread!=0:
+            m = self._get_linear_parameters(ntokens-(2*nspread))
         else:
-            m, t = self._get_linear_parameters(ntokens)
-        hit_tokens = (hit_times - t) / m
+            m = self._get_linear_parameters(ntokens)
+        hit_tokens = (hit_times) / m
         hit_tokens = np.round(hit_tokens)
         hit_tokens = hit_tokens.astype(int)
         
         hit_slices = [np.arange(token-nspread, token+nspread+1, dtype=int) for token in hit_tokens]
         hit_slices = np.asarray(hit_slices)
             
-        if padded:
+        if self.padded:
             hit_slices += nspread
         
         # Handle edge cases
@@ -80,38 +87,42 @@ class EventSlicer:
         return hit_slices
     
     
-    def _slicify_event(self, event, ntokens, nspread, padded=False, non_active=False):
+    def _slicify_event(self, event, ntokens, nspread, non_active=False):
+        '''
+        Takes an event and puts in into slices
+        '''
         n_slices = 2 * nspread + 1
         n_pulses, n_features = event.shape
         hit_slices = self._get_hit_slices(event, ntokens, nspread)
-
+        
         if non_active:
             event_sliced = self.pads * np.ones((ntokens, self.ndoms, n_features-1))
         else:
             event_sliced = self.pads * np.ones((ntokens, n_pulses, n_features))
-
+        
         for i, (pulse, slices) in enumerate(zip(event, hit_slices)):
             if non_active:
                 idom = int(pulse[0])
                 features = pulse[1:]
             else:
                 features = pulse
-
+            
             feat_repeat = np.asarray([features]*n_slices)
-
+                
             if non_active:
                 idx = idom
             else:
                 idx = i
             event_sliced[slices, idx] = feat_repeat
-
+            
         return event_sliced
-
-
+    
+    
+    
     def slicify_events(self, ntokens, nspread, padded=False, non_active=False):
         '''
         Takes pulse list and transforms into temporal slices.
-
+        
         Parameters:
         ----------
         ntokens: int
@@ -120,8 +131,10 @@ class EventSlicer:
             Number of temporal slices a pulse should occupy before and after its actaul slice
         padded: bool
             Reserve pads at beginning and end of hit sequence for possible hit bleeding
-        non_active: bool
+        non_active: book
             Include non-active doms (otherwise just pulses)
         '''
+        
+        self.padded = padded
         events = self.x
-        return [self._slicify_event(event, ntokens, nspread, padded, non_active) for event in tqdm(events)]
+        return [self._slicify_event(event, ntokens, nspread, non_active) for event in tqdm(events)]
