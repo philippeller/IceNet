@@ -60,7 +60,8 @@ def get_data(
     pulses = np.array(h[pulses_i3key])
 
     if N_events is None:
-        N_events = truth.shape[0]
+        nevents = lambda x: len(np.unique(x['Event'])) # Get number of unique events in container
+        N_events = min(nevents(pulses), nevents(truth))
     
          
     # need to figure out max number of pulses in any event / string / dom first to allocate array
