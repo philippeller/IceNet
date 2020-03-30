@@ -60,7 +60,8 @@ def get_data(
     pulses = np.array(h[pulses_i3key])
 
     if N_events is None:
-        N_events = truth.shape[0]
+        nevents = lambda x: len(np.unique(x['Event'])) # Get number of unique events in container
+        N_events = min(nevents(pulses), nevents(truth))
     
          
     # need to figure out max number of pulses in any event / string / dom first to allocate array
@@ -84,6 +85,8 @@ def get_data(
     
     else:
         X = np.zeros((N_events, N_channels, N_pulses, N_features), dtype=dtype)
+
+    y = np.zeros((N_events, len(labels)), dtype=dtype)
     
     data_idx = 0
     bincount = np.bincount(pulses['Event'])
@@ -94,6 +97,11 @@ def get_data(
             if num_pulses == 0:
                 continue
 
+            l = truth[truth['Event'] == event_idx]
+            if not l:
+                continue
+            for i, label in enumerate(labels):
+                y[data_idx, i] = l[label]
 
             if ragged:
                 X.append([[[dtype(0.) for i in range(len(features))]] for i in range(N_channels)])
@@ -131,11 +139,6 @@ def get_data(
                                                                              
     if sparse:
         X = tf.sparse.SparseTensor(indices, values, dense_shape)
-    
-    y = np.empty((N_events, len(labels)), dtype=dtype)
-
-    for i, label in enumerate(labels):
-        y[:, i] = truth[:N_events][label]
 
     return X, y
 
