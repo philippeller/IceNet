@@ -502,3 +502,81 @@ def get_event_hits(
 
 
     return X, w, y
+
+def get_event_charge(
+    fname,
+    truth_i3key='MCInIcePrimary',
+    pulses_i3key='SRTTWOfflinePulsesDC',
+    labels=['x', 'y', 'z', 'time', 'zenith', 'azimuth', 'energy'],
+    N_events=None, 
+    dtype=np.float32,
+    ):
+    '''Load in icetray hdf file for machine learning
+    
+    Parameters:
+    -----------
+    fname : str
+        filename / path
+    truth_i3key : str
+        key of truth information
+    pulses_i3key : str
+        pulse series
+    labels : list
+        labels for training vector
+    N_events : int (optional)
+        number of events to read
+    dtype : dtype
+        dtype of output arrays
+        
+    Returns:
+    --------
+    
+    X : array
+        feature array of shape (N_events,)
+    y : arrays
+        label array of shape (N_events, N_labels,)
+    
+    '''
+    
+    h = h5py.File(fname, 'r')
+
+    truth = np.array(h[truth_i3key])
+    pulses = np.array(h[pulses_i3key])
+
+
+    if N_events is None:
+        nevents = lambda x: len(np.unique(x['Event'])) # Get number of unique events in container
+        N_events = min(nevents(pulses), nevents(truth))
+
+    N_labels = len(labels)
+    
+    data_idx = 0
+    bincount = np.bincount(pulses['Event'])
+
+    X = np.empty((N_events,), dtype=dtype)
+    y = np.empty((N_events, N_labels), dtype=dtype)
+
+    # fill array
+    with tqdm(total=N_events) as pbar:
+        for event_idx, num_pulses in enumerate(bincount):
+            if num_pulses == 0:
+                continue
+
+            l = truth[truth['Event'] == event_idx]
+            if not l:
+                continue
+
+            for i, label in enumerate(labels):
+                y[data_idx, i] = l[label]
+
+            p = pulses[pulses['Event'] == event_idx]
+
+            X[data_idx] = np.sum(p['charge'])
+
+            data_idx += 1
+            pbar.update(1)
+
+            if data_idx == N_events:
+                return X, y
+
+    return X, y
