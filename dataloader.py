@@ -222,7 +222,7 @@ def get_data_3d(
     pulses['om'] -= 1
 
     N_channels = 5160
-    N_features = 7 #len(features)
+    N_features = 6 #len(features)
 
     # ToDo
     
@@ -291,9 +291,10 @@ def get_data_3d(
                     channel_idx = 60 * string_idx + dom_idx
 
                     #X[data_idx, channel_idx, 0] = 1
-                    X[data_idx, channel_idx, 0] = len(p)
-                    X[data_idx, channel_idx, 1] = np.sum(p['charge'])
-                    X[data_idx, channel_idx, 2:] = np.percentile(p['time'], [0, 30, 50, 70, 100])
+                    #X[data_idx, channel_idx, 0] = len(p)
+                    X[data_idx, channel_idx, 0] = np.sum(p['charge'])
+                    # do charge weighted percentiles
+                    X[data_idx, channel_idx, 1:] = np.percentile(p['time'], [0, 25, 50, 75, 100])
 
             data_idx += 1
             pbar.update(1)
