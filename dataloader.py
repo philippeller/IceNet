@@ -309,3 +309,97 @@ def get_data_3d(
 
 
 
+def get_single_hits(
+    fname,
+    geo='geo_array.npy',
+    truth_i3key='MCInIcePrimary',
+    pulses_i3key='SRTTWOfflinePulsesDC',
+    labels=['x', 'y', 'z', 'time', 'zenith', 'azimuth', 'energy'],
+    N_hits=None, 
+    dtype=np.float32,
+    ):
+    '''Load in icetray hdf file for machine learning
+    
+    Parameters:
+    -----------
+    fname : str
+        filename / path
+    geo : str
+        filename / path to npy geometry file
+    truth_i3key : str
+        key of truth information
+    pulses_i3key : str
+        pulse series
+    labels : list
+        labels for training vector
+    N_hits : int (optional)
+        number of hits to read
+    dtype : dtype
+        dtype of output arrays
+        
+    Returns:
+    --------
+    
+    X : array
+        feature array of shape (N_hits, 4)
+    w : array
+        weights of hits (= charge)
+    y : array
+        label array of shape (N_hits, N_labels)
+    
+    '''
+    
+    h = h5py.File(fname, 'r')
+
+    truth = np.array(h[truth_i3key])
+    pulses = np.array(h[pulses_i3key])
+
+    geo = np.load(geo)
+
+    if N_hits is None:
+        N_hits = len(Pulses) 
+    
+    X = np.zeros((N_hits, 4), dtype=dtype)
+    w = np.zeros((N_hits,), dtype=dtype)
+    y = np.zeros((N_hits, len(labels)), dtype=dtype)
+    
+    
+    data_idx = 0
+    bincount = np.bincount(pulses['Event'])
+    
+    # fill array
+    with tqdm(total=N_hits) as pbar:
+        for event_idx, num_pulses in enumerate(bincount):
+            if num_pulses == 0:
+                continue
+
+            l = truth[truth['Event'] == event_idx]
+            if not l:
+                continue
+
+            last_idx = min(data_idx+num_pulses, N_hits)
+
+            for i, label in enumerate(labels):
+                y[data_idx:last_idx, i] = l[label]
+
+            p = pulses[pulses['Event'] == event_idx]
+
+            # Vectorize me!
+            for hit in p:
+
+                pbar.update(1)
+
+                if data_idx == N_hits:
+
+                    return X, w, y
+
+                string_idx = hit['string'] - 1
+                dom_idx = hit['om'] - 1
+
+                X[data_idx, 0:3] = geo[string_idx, dom_idx]
+                X[data_idx, 3] = hit['time']
+                w[data_idx] = hit['charge']
+
+                data_idx += 1
+
+    return X, w, y
