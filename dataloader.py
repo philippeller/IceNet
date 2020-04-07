@@ -357,7 +357,7 @@ def get_single_hits(
     geo = np.load(geo)
 
     if N_hits is None:
-        N_hits = len(Pulses) 
+        N_hits = len(pulses) 
     
     X = np.zeros((N_hits, 4), dtype=dtype)
     w = np.zeros((N_hits,), dtype=dtype)
