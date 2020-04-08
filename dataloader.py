@@ -5,6 +5,38 @@ import h5py
 from numba import jit
 from tqdm import tqdm
 
+def get_truths(out, labels, MCPrimary, MCTree=None):
+    '''Get true parameters for event'''
+    
+    if 'track_energy' in labels or 'cascade_energy' in labels:
+        muon_mask = np.abs(MCTree['pdg_encoding']) == 13
+        if np.any(muon_mask):
+            muon_energy = np.max(MCTree[muon_mask]['energy'])
+        else:
+            muon_energy = 0.
+    
+    if 'cascade_energy' in labels:
+        neutrino_energy = MCPrimary['energy']
+        invisible_mask = (np.abs(MCTree['pdg_encoding']) == 12) | (np.abs(MCTree['pdg_encoding']) == 14) | (np.abs(MCTree['pdg_encoding']) == 16) 
+        # exclude primary:
+        invisible_mask[0] = False
+        if np.any(invisible_mask):
+            # we'll make the bold assumptions that none of the neutrinos re-interact ;)
+            invisible_energy = np.sum(MCTree[invisible_mask]['energy'])
+        else:
+            invisible_energy = 0.
+        cascade_energy = neutrino_energy - muon_energy - invisible_energy
+
+    for i, label in enumerate(labels):
+        if label == 'track_energy':
+            out[i] = muon_energy
+        elif label == 'cascade_energy':
+            out[i] = cascade_energy
+        else:
+            out[i] = MCPrimary[label]
+
+
+
 def get_data(
     fname,
     truth_i3key='MCInIcePrimary',
@@ -353,6 +385,7 @@ def get_single_hits(
 
     truth = np.array(h[truth_i3key])
     pulses = np.array(h[pulses_i3key])
+    mctree = np.array(h['I3MCTree'])
 
     geo = np.load(geo)
 
@@ -376,11 +409,14 @@ def get_single_hits(
             l = truth[truth['Event'] == event_idx]
             if not l:
                 continue
+            m = mctree[mctree['Event'] == event_idx]
 
             last_idx = min(data_idx+num_pulses, N_hits)
 
-            for i, label in enumerate(labels):
-                y[data_idx:last_idx, i] = l[label]
+            one_y = np.zeros((len(labels),), dtype=dtype)
+            get_truths(one_y, labels, l, m)
+
+            y[data_idx:last_idx] = one_y
 
             p = pulses[pulses['Event'] == event_idx]
 
@@ -403,6 +439,7 @@ def get_single_hits(
                 data_idx += 1
 
     return X, w, y
+
 
 def get_event_hits(
     fname,
@@ -448,6 +485,7 @@ def get_event_hits(
 
     truth = np.array(h[truth_i3key])
     pulses = np.array(h[pulses_i3key])
+    mctree = np.array(h['I3MCTree'])
 
     geo = np.load(geo)
 
@@ -472,12 +510,13 @@ def get_event_hits(
             if not l:
                 continue
 
+            m = mctree[mctree['Event'] == event_idx]
+
             X = np.zeros((num_pulses, 4), dtype=dtype)
             w = np.zeros((num_pulses,), dtype=dtype)
             y = np.zeros((len(labels),), dtype=dtype)
 
-            for i, label in enumerate(labels):
-                y[i] = l[label]
+            get_truths(y, labels, l, m)
 
             p = pulses[pulses['Event'] == event_idx]
 
@@ -542,6 +581,7 @@ def get_event_charge(
 
     truth = np.array(h[truth_i3key])
     pulses = np.array(h[pulses_i3key])
+    mctree = np.array(h['I3MCTree'])
 
 
     if N_events is None:
@@ -565,9 +605,9 @@ def get_event_charge(
             l = truth[truth['Event'] == event_idx]
             if not l:
                 continue
+            m = mctree[mctree['Event'] == event_idx]
 
-            for i, label in enumerate(labels):
-                y[data_idx, i] = l[label]
+            get_truths(y[data_idx], labels, l, m)
 
             p = pulses[pulses['Event'] == event_idx]
 
