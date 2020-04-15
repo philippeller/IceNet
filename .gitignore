@@ -1,3 +1,15 @@
+# Images
+*.png
+*.pdf
+
+# data
+*.i3
+*.h5
+*.hdf5
+*.csv
+*.npy
+*.npz
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
