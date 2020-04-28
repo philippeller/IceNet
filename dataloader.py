@@ -5,6 +5,38 @@ import h5py
 from numba import jit
 from tqdm import tqdm
 
+def get_truths(out, labels, MCPrimary, MCTree=None):
+    '''Get true parameters for event'''
+    
+    if 'track_energy' in labels or 'cascade_energy' in labels:
+        muon_mask = np.abs(MCTree['pdg_encoding']) == 13
+        if np.any(muon_mask):
+            muon_energy = np.max(MCTree[muon_mask]['energy'])
+        else:
+            muon_energy = 0.
+    
+    if 'cascade_energy' in labels:
+        neutrino_energy = MCPrimary['energy']
+        invisible_mask = (np.abs(MCTree['pdg_encoding']) == 12) | (np.abs(MCTree['pdg_encoding']) == 14) | (np.abs(MCTree['pdg_encoding']) == 16) 
+        # exclude primary:
+        invisible_mask[0] = False
+        if np.any(invisible_mask):
+            # we'll make the bold assumptions that none of the neutrinos re-interact ;)
+            invisible_energy = np.sum(MCTree[invisible_mask]['energy'])
+        else:
+            invisible_energy = 0.
+        cascade_energy = neutrino_energy - muon_energy - invisible_energy
+
+    for i, label in enumerate(labels):
+        if label == 'track_energy':
+            out[i] = muon_energy
+        elif label == 'cascade_energy':
+            out[i] = cascade_energy
+        else:
+            out[i] = MCPrimary[label]
+
+
+
 def get_data(
     fname,
     truth_i3key='MCInIcePrimary',
@@ -186,7 +218,7 @@ def get_data_3d(
     pulses['om'] -= 1
 
     N_channels = 5160
-    N_features = 7 #len(features)
+    N_features = 6 #len(features)
 
     # ToDo
     
@@ -255,9 +287,10 @@ def get_data_3d(
                     channel_idx = 60 * string_idx + dom_idx
 
                     #X[data_idx, channel_idx, 0] = 1
-                    X[data_idx, channel_idx, 0] = len(p)
-                    X[data_idx, channel_idx, 1] = np.sum(p['charge'])
-                    X[data_idx, channel_idx, 2:] = np.percentile(p['time'], [0, 30, 50, 70, 100])
+                    #X[data_idx, channel_idx, 0] = len(p)
+                    X[data_idx, channel_idx, 0] = np.sum(p['charge'])
+                    # do charge weighted percentiles
+                    X[data_idx, channel_idx, 1:] = np.percentile(p['time'], [0, 25, 50, 75, 100])
 
             data_idx += 1
             pbar.update(1)
