@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 from tqdm.notebook import tqdm
 
+
 ndoms = 5160
 
 
@@ -35,13 +36,19 @@ def normalize_dom_distance_matrix(dists):
     std = np.std(dists)
     return dists / 100.
 
-def get_dom_distance_matrix(cache_name='./dom_dist_matrix.npy'):
+
+def get_dom_distance_matrix(cache_name='./cache/dom_dist_matrix.npy'):
     try:
         dists = np.load(cache_name)
     except:
         dists = calculate_dom_distance_matrix()
+        try:
+            import os
+            os.makedirs("./cache")
+        except FileExistsError:
+            # directory already exists
+            pass
         np.save(cache_name, dists)
-    dists = normalize_dom_distance_matrix(dists)
     return dists
 
 
