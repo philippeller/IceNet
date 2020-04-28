@@ -268,67 +268,282 @@ def get_data_3d(
     return X, y, r
 
 
-def get_pulses(
+def get_single_hits(
     fname,
+    geo='geo_array.npy',
     truth_i3key='MCInIcePrimary',
     pulses_i3key='SRTTWOfflinePulsesDC',
-    features=['time', 'charge'],
-    labels=['zenith', 'azimuth'],
-    N_events=None,
+    labels=['x', 'y', 'z', 'time', 'zenith', 'azimuth', 'energy'],
+    N_hits=None, 
     dtype=np.float32,
     ):
-
-
+    '''Load in icetray hdf file for machine learning
+    
+    Parameters:
+    -----------
+    fname : str
+        filename / path
+    geo : str
+        filename / path to npy geometry file
+    truth_i3key : str
+        key of truth information
+    pulses_i3key : str
+        pulse series
+    labels : list
+        labels for training vector
+    N_hits : int (optional)
+        number of hits to read
+    dtype : dtype
+        dtype of output arrays
+        
+    Returns:
+    --------
+    
+    X : array
+        feature array of shape (N_hits, 4)
+    w : array
+        weights of hits (= charge)
+    y : array
+        label array of shape (N_hits, N_labels)
+    
+    '''
+    
     h = h5py.File(fname, 'r')
 
     truth = np.array(h[truth_i3key])
     pulses = np.array(h[pulses_i3key])
+    mctree = np.array(h['I3MCTree'])
 
-    if N_events is None:
-        N_events = truth.shape[0]
+    geo = np.load(geo)
+
+    if N_hits is None:
+        N_hits = len(pulses) 
     
-    x = []
-    y = []
+    X = np.zeros((N_hits, 4), dtype=dtype)
+    w = np.zeros((N_hits,), dtype=dtype)
+    y = np.zeros((N_hits, len(labels)), dtype=dtype)
+    
     
     data_idx = 0
     bincount = np.bincount(pulses['Event'])
     
     # fill array
+    with tqdm(total=N_hits) as pbar:
+        for event_idx, num_pulses in enumerate(bincount):
+            if num_pulses == 0:
+                continue
+
+            l = truth[truth['Event'] == event_idx]
+            if not l:
+                continue
+            m = mctree[mctree['Event'] == event_idx]
+
+            last_idx = min(data_idx+num_pulses, N_hits)
+
+            one_y = np.zeros((len(labels),), dtype=dtype)
+            get_truths(one_y, labels, l, m)
+
+            y[data_idx:last_idx] = one_y
+
+            p = pulses[pulses['Event'] == event_idx]
+
+            # Vectorize me!
+            for hit in p:
+
+                pbar.update(1)
+
+                if data_idx == N_hits:
+
+                    return X, w, y
+
+                string_idx = hit['string'] - 1
+                dom_idx = hit['om'] - 1
+
+                X[data_idx, 0:3] = geo[string_idx, dom_idx]
+                X[data_idx, 3] = hit['time']
+                w[data_idx] = hit['charge']
+
+                data_idx += 1
+
+    return X, w, y
+
+
+def get_event_hits(
+    fname,
+    geo='geo_array.npy',
+    truth_i3key='MCInIcePrimary',
+    pulses_i3key='SRTTWOfflinePulsesDC',
+    labels=['x', 'y', 'z', 'time', 'zenith', 'azimuth', 'energy'],
+    N_events=None, 
+    dtype=np.float32,
+    ):
+    '''Load in icetray hdf file for machine learning
     
-    for event_idx, num_pulses in tqdm(enumerate(bincount), total=len(bincount)):
-        if num_pulses == 0:
-            continue
+    Parameters:
+    -----------
+    fname : str
+        filename / path
+    geo : str
+        filename / path to npy geometry file
+    truth_i3key : str
+        key of truth information
+    pulses_i3key : str
+        pulse series
+    labels : list
+        labels for training vector
+    N_events : int (optional)
+        number of events to read
+    dtype : dtype
+        dtype of output arrays
         
-        p = pulses[pulses['Event'] == event_idx]
-        hitlist = []
-        for hit in p:
-            
-            hit_idx = hit['vector_index']
-            string_idx = hit['string'] - 1
-            dom_idx = hit['om'] - 1
-            channel_idx = 60 * string_idx + dom_idx
-            
-            feature_vector = [channel_idx]
-            for i, feature in enumerate(features):
-                if (feature == 'time'):
-                    time_axis = i+1
-                feature_vector.append(hit[feature])
-            
-            hitlist.append(feature_vector)
-            
-        # Sort pulses by time for each event
-        if ('time' in features):
-            hitlist = np.asarray(hitlist)
-            time_idx = np.argsort(hitlist[:, time_axis])
-            hitlist = hitlist[time_idx]
-        
-        x.append(hitlist)
-        
-        l = truth[truth['Event']==event_idx]
-        feature = np.asarray([l[label] for label in labels], dtype=dtype)
-        
-        y.append(feature.flatten())
-        
-        data_idx += 1       
+    Returns:
+    --------
     
-    return x, y
+    X : list of arrays
+        feature array of shape (N_hits, 4)
+    w : list of arrays
+        weights of hits (= charge) (N_hits,)
+    y : list of arrays
+        label array of shape (N_labels,)
+    
+    '''
+    
+    h = h5py.File(fname, 'r')
+
+    truth = np.array(h[truth_i3key])
+    pulses = np.array(h[pulses_i3key])
+    mctree = np.array(h['I3MCTree'])
+
+    geo = np.load(geo)
+
+    if N_events is None:
+        nevents = lambda x: len(np.unique(x['Event'])) # Get number of unique events in container
+        N_events = min(nevents(pulses), nevents(truth))
+    
+    data_idx = 0
+    bincount = np.bincount(pulses['Event'])
+    
+    Xs = []
+    ws = []
+    ys = []
+
+    # fill array
+    with tqdm(total=N_events) as pbar:
+        for event_idx, num_pulses in enumerate(bincount):
+            if num_pulses == 0:
+                continue
+
+            l = truth[truth['Event'] == event_idx]
+            if not l:
+                continue
+
+            m = mctree[mctree['Event'] == event_idx]
+
+            X = np.zeros((num_pulses, 4), dtype=dtype)
+            w = np.zeros((num_pulses,), dtype=dtype)
+            y = np.zeros((len(labels),), dtype=dtype)
+
+            get_truths(y, labels, l, m)
+
+            p = pulses[pulses['Event'] == event_idx]
+
+            # Vectorize me!
+            for i, hit in enumerate(p):
+                string_idx = hit['string'] - 1
+                dom_idx = hit['om'] - 1
+
+                X[i, 0:3] = geo[string_idx, dom_idx]
+                X[i, 3] = hit['time']
+                w[i] = hit['charge']
+
+            Xs.append(X)
+            ws.append(w)
+            ys.append(y)
+
+            data_idx += 1
+            pbar.update(1)
+
+            if data_idx == N_events:
+                return Xs, ws, ys
+
+
+    return X, w, y
+
+def get_event_charge(
+    fname,
+    truth_i3key='MCInIcePrimary',
+    pulses_i3key='SRTTWOfflinePulsesDC',
+    labels=['x', 'y', 'z', 'time', 'zenith', 'azimuth', 'energy'],
+    N_events=None, 
+    dtype=np.float32,
+    ):
+    '''Load in icetray hdf file for machine learning
+    
+    Parameters:
+    -----------
+    fname : str
+        filename / path
+    truth_i3key : str
+        key of truth information
+    pulses_i3key : str
+        pulse series
+    labels : list
+        labels for training vector
+    N_events : int (optional)
+        number of events to read
+    dtype : dtype
+        dtype of output arrays
+        
+    Returns:
+    --------
+    
+    X : array
+        feature array of shape (N_events,)
+    y : arrays
+        label array of shape (N_events, N_labels,)
+    
+    '''
+    
+    h = h5py.File(fname, 'r')
+
+    truth = np.array(h[truth_i3key])
+    pulses = np.array(h[pulses_i3key])
+    mctree = np.array(h['I3MCTree'])
+
+
+    if N_events is None:
+        nevents = lambda x: len(np.unique(x['Event'])) # Get number of unique events in container
+        N_events = min(nevents(pulses), nevents(truth))
+
+    N_labels = len(labels)
+    
+    data_idx = 0
+    bincount = np.bincount(pulses['Event'])
+
+    X = np.empty((N_events,), dtype=dtype)
+    y = np.empty((N_events, N_labels), dtype=dtype)
+
+    # fill array
+    with tqdm(total=N_events) as pbar:
+        for event_idx, num_pulses in enumerate(bincount):
+            if num_pulses == 0:
+                continue
+
+            l = truth[truth['Event'] == event_idx]
+            if not l:
+                continue
+            m = mctree[mctree['Event'] == event_idx]
+
+            get_truths(y[data_idx], labels, l, m)
+
+            p = pulses[pulses['Event'] == event_idx]
+
+            X[data_idx] = np.sum(p['charge'])
+
+            data_idx += 1
+            pbar.update(1)
+
+            if data_idx == N_events:
+                return X, y
+
+    return X, y
