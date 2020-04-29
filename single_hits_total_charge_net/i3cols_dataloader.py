@@ -104,3 +104,35 @@ def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
 
     
     return single_hits, repeated_params, total_charge, params, labels
+
+def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
+              labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
+              geo='geo_array.npy',
+              dtype=np.float32):
+    """
+    Create event=by=event data for hit and charge net
+    
+    Returns:
+    --------
+    list of:
+        single_hits : ndarray
+            shape (N_hits, 5)
+        total_charge : float
+        params : ndarray
+            shape (len(labels))
+    labels
+    """
+    
+    hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
+    
+    single_hits, repeated_params, total_charge, params, labels = load_data(dir=dir, labels=labels, geo=geo, dtype=dtype)
+    
+    events = []
+    
+    for i in range(len(total_charge)):
+        event = {}
+        event['total_charge'] = total_charge[i]
+        event['hits'] = single_hits[hits_idx[i]['start'] : hits_idx[i]['stop']]
+        event['params'] = params[i]
+        events.append(event)
+    return events, labels
