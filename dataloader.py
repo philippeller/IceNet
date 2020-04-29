@@ -45,9 +45,6 @@ def get_data(
     labels=['zenith', 'azimuth'],
     N_events=None, 
     dtype=np.float32,
-    #ragged_left=True,
-    sparse=True,
-    ragged=False,
     ):
     '''Load in icetray hdf file for machine learning
     
@@ -67,12 +64,6 @@ def get_data(
         number of events to read
     dtype : dtype
         dtype of output arrays
-    ragged_left : bool
-        align hits to the right end of tensor
-    sparse : bool
-        if true, retrun feature vector as tf.sparse.SparseTensor
-    ragged : bool
-        if true, return feature vector as tf.RaggedTensor
         
     Returns:
     --------
@@ -84,8 +75,6 @@ def get_data(
     
     '''
     
-    assert not (sparse and ragged)
-
     h = h5py.File(fname, 'r')
 
     truth = np.array(h[truth_i3key])
@@ -105,20 +94,8 @@ def get_data(
     N_pulses = max_pulses
     N_features = len(features)
     
-    if sparse:
-        import tensorflow as tf
-        indices = []
-        values = []
-        dense_shape = [N_events, N_channels, N_pulses, N_features]
-    
-    elif ragged:
-        import tensorflow as tf
-        X = []
-    
-    else:
-        X = np.zeros((N_events, N_channels, N_pulses, N_features), dtype=dtype)
-
-    y = np.zeros((N_events, len(labels)), dtype=dtype)
+    X = np.zeros((N_events, N_channels, N_pulses, N_features), dtype=dtype)
+    y = np.zeros((N_events, len(labels)))
     
     data_idx = 0
     bincount = np.bincount(pulses['Event'])
@@ -134,11 +111,9 @@ def get_data(
                 continue
             for i, label in enumerate(labels):
                 y[data_idx, i] = l[label]
-
-            if ragged:
-                X.append([[[dtype(0.) for i in range(len(features))]] for i in range(N_channels)])
-
+                
             p = pulses[pulses['Event'] == event_idx]
+            
 
             for hit in p:
 
@@ -147,31 +122,17 @@ def get_data(
                 dom_idx = hit['om'] - 1
                 channel_idx = 60 * string_idx + dom_idx
 
-                if ragged:
-                    X[-1][channel_idx].append([])
-
                 for i, feature in enumerate(features):
 
-                    if sparse:
-                        indices.append([data_idx, channel_idx, hit_idx, i])
-                        values.append(dtype(hit[feature]))
-                    elif ragged:
-                        X[-1][channel_idx][-1].append(dtype(hit[feature]))
-                    else:
-                        X[data_idx, channel_idx, hit_idx, i] = hit[feature]
+                    X[data_idx, channel_idx, hit_idx, i] = hit[feature]
 
+            
             data_idx += 1
             pbar.update(1)
             
             if data_idx == N_events:
                 break
         
-    if ragged:
-        X = tf.ragged.constant(X)
-                                                                             
-    if sparse:
-        X = tf.sparse.SparseTensor(indices, values, dense_shape)
-
     return X, y
 
 
@@ -287,7 +248,7 @@ def get_data_3d(
             # fill truth info
             this_truth = truth[truth_event_idx == event_idx]
             this_reco = reco[reco_event_idx == event_idx]
-            event_p = pulses[pulses_event_idx == event_idx]            
+            event_p = pulses[pulses_event_idx == event_idx]
 
             # time conversion
             # shift by median and divide by 1000
@@ -335,10 +296,9 @@ def get_data_3d(
             pbar.update(1)
 
             if data_idx == N_events:
-                break  
+                break
     
     return X, y, r
-
 
 
 def get_single_hits(
