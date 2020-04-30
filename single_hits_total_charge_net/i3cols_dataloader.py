@@ -108,6 +108,7 @@ def load_data(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3co
 def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3cols',
               labels=['x', 'y', 'z', 'time', 'azimuth','zenith', 'cascade_energy', 'track_energy'],
               geo='geo_array.npy',
+              recos = {},
               dtype=np.float32):
     """
     Create event=by=event data for hit and charge net
@@ -126,7 +127,20 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
     hits_idx = np.load(os.path.join(dir, 'SRTTWOfflinePulsesDC/index.npy'))
     
     single_hits, repeated_params, total_charge, params, labels = load_data(dir=dir, labels=labels, geo=geo, dtype=dtype)
-    
+
+    reco_params = {}
+    for r,f in recos.items():
+        reco = np.load(os.path.join(dir, f, 'data.npy'))
+        reco_params[r] = np.zeros_like(params)
+        for i, label in enumerate(labels):
+            if label == 'x': reco_params[r][:, i] = reco['pos']['x']
+            elif label == 'y': reco_params[r][:, i] = reco['pos']['y']
+            elif label == 'z': reco_params[r][:, i] = reco['pos']['z']
+            elif label == 'time': reco_params[r][:, i] = reco['time']
+            elif label == 'azimuth': reco_params[r][:, i] = reco['dir']['azimuth']
+            elif label == 'zenith': reco_params[r][:, i] = reco['dir']['zenith']
+            elif label == 'energy': reco_params[r][:, i] = reco['energy']
+
     events = []
     
     for i in range(len(total_charge)):
@@ -134,5 +148,7 @@ def load_events(dir='/home/iwsatlas1/peller/work/oscNext/level7_v01.04/140000_i3
         event['total_charge'] = total_charge[i]
         event['hits'] = single_hits[hits_idx[i]['start'] : hits_idx[i]['stop']]
         event['params'] = params[i]
+        for r in recos.keys():
+            event[r] = reco_params[r][i]
         events.append(event)
     return events, labels

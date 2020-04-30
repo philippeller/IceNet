@@ -1,3 +1,6 @@
+
+# extr_sep --concatenate-and-index-by subrun INSTEAD of extr_as_one
+
 i3cols extr_as_one ~/work/oscNext/level7_v01.04/140000/oscNext_genie_level7_v01.04_pass2.140000.00???0.i3.zst \
     --outdir ~/work/oscNext/level7_v01.04/140000_i3cols \
     --keys I3EventHeader \
